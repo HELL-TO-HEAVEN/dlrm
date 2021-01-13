@@ -87,7 +87,7 @@ def getDigixData(
         dataset_multiprocessing=False,
     ):
     # read data 
-    df = pd.read_csv(datafile)
+    df = pd.read_csv(datafile, sep="|")
     np.random.seed(123)
 
     #reshuffle the data 
