@@ -51,33 +51,24 @@
 # Misha Smelyanskiy, "Deep Learning Recommendation Model for Personalization and
 # Recommendation Systems", CoRR, arXiv:1906.00091, 2019
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
 import argparse
-
 # miscellaneous
 import builtins
 import datetime
 import json
 import sys
 import time
-
 # onnx
 # The onnx import causes deprecation warnings every time workers
 # are spawned during testing. So, we filter out those warnings.
 import warnings
 
-# data generation
-import dlrm_data_pytorch as dp
-
-# For distributed run
-import extend_distributed as ext_dist
-import mlperf_logger
-
 # numpy
 import numpy as np
 import sklearn.metrics
-
 # pytorch
 import torch
 import torch.nn as nn
@@ -88,12 +79,17 @@ from torch.nn.parallel.replicate import replicate
 from torch.nn.parallel.scatter_gather import gather, scatter
 from torch.nn.parameter import Parameter
 from torch.optim.lr_scheduler import _LRScheduler
-import optim.rwsadagrad as RowWiseSparseAdagrad
 from torch.utils.tensorboard import SummaryWriter
 
+# data generation
+import dlrm_data_pytorch as dp
+# For distributed run
+import extend_distributed as ext_dist
+import mlperf_logger
+import optim.rwsadagrad as RowWiseSparseAdagrad
+from data_preprocess_digix import make_digix_data_and_loaders
 # mixed-dimension trick
 from tricks.md_embedding_bag import PrEmbeddingBag, md_solver
-
 # quotient-remainder trick
 from tricks.qr_embedding_bag import QREmbeddingBag
 
@@ -1075,7 +1071,11 @@ def run():
         mlperf_logger.barrier()
 
     if args.data_generation == "dataset":
-        train_data, train_ld, test_data, test_ld = dp.make_criteo_data_and_loaders(args)
+        if args.data_set == "digix":
+            train_data, train_ld, test_data, test_ld = make_digix_data_and_loaders(args)
+        else: #make criteo kaggle or terabyte datasets and loaders
+            train_data, train_ld, test_data, test_ld = dp.make_criteo_data_and_loaders(args)
+
         table_feature_map = {idx: idx for idx in range(len(train_data.counts))}
         nbatches = args.num_batches if args.num_batches > 0 else len(train_ld)
         nbatches_test = len(test_ld)
