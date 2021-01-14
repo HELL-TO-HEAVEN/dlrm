@@ -753,6 +753,8 @@ def inference(
 ):
     test_accu = 0
     test_samp = 0
+    target = np.array([])
+    actual = np.array([])
 
     if args.mlperf_logging:
         scores = []
@@ -806,6 +808,9 @@ def inference(
 
                 test_accu += A_test
                 test_samp += mbs_test
+                target = np.append(target, T_test)
+                actual = np.append(actual, S_test)
+
 
     if args.mlperf_logging:
         with record_function("DLRM mlperf sklearn metrics compute"):
@@ -840,7 +845,11 @@ def inference(
         acc_test = validation_results["accuracy"]
     else:
         acc_test = test_accu / test_samp
+        test_loss = sklearn.metrics.log_loss(target, actual)
+        f1_score = sklearn.metrics.f1_score(target, np.round(actual))
         writer.add_scalar("Test/Acc", acc_test, log_iter)
+        writer.add_scalar("Test/Loss", test_loss, log_iter)
+        writer.add_scalar("Test/F1", f1_score, log_iter)
 
     model_metrics_dict = {
         "nepochs": args.nepochs,

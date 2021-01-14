@@ -87,7 +87,7 @@ def getDigixData(
         dataset_multiprocessing=False,
     ):
     # read data 
-    df = pd.read_csv(datafile, sep="|")
+    df = pd.read_csv(datafile)#, sep="|")
     np.random.seed(123)
 
     #reshuffle the data 
@@ -96,10 +96,15 @@ def getDigixData(
     # potentially clean data here 
 
     # define cont and cat as well as targets
-    y = "label"
-    delete = ["communication_onlinerate", "pt_d"]
-    cont = ["age", "device_size", "his_app_size", "list_time","device_price",
-        "up_life_duration", "membership_life_duration","communication_avgonline_30d"]
+#    y = "label"
+#    delete = ["communication_onlinerate", "pt_d"]
+#    cont = ["age", "device_size", "his_app_size", "list_time","device_price",
+#        "up_life_duration", "membership_life_duration","communication_avgonline_30d"]
+
+    y = "click"
+    delete = ["index"]
+    cont = ["hour"]
+
     cat = list(set(list(df.columns)) - set(delete) -set(cont) - set([y]))
     df_cat = df[cat]
     one_hot = OneHotEncoder()
