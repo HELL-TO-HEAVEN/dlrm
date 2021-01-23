@@ -95,7 +95,7 @@ def getDigixData(
     num_of_chunk = 0
     df = pd.DataFrame()
         
-    for chunk in pd.read_csv(datafile, chunksize=chunksize, sep = ","):# sep="|"):
+    for chunk in pd.read_csv(datafile, chunksize=chunksize, sep="|"):
         num_of_chunk += 1
 
         uids = chunk[["uid","label"]]
