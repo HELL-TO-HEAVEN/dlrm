@@ -6,6 +6,8 @@ from torch.utils.data import Dataset, RandomSampler
 import pandas as pd 
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder
+from imblearn.under_sampling import RandomUnderSampler
+
 
 
 def collate_wrapper_digix_offset(list_of_tuples):
@@ -87,49 +89,84 @@ def getDigixData(
         dataset_multiprocessing=False,
     ):
     # read data 
-    df = pd.read_csv(datafile)#, sep="|")
+    #df = pd.read_csv(datafile, sep="|")
+
+    chunksize = 10 ** 6
+    num_of_chunk = 0
+    df = pd.DataFrame()
+        
+    for chunk in pd.read_csv(datafile, chunksize=chunksize, sep = ","):# sep="|"):
+        num_of_chunk += 1
+
+        uids = chunk[["uid","label"]]
+        nulls = list(uids[uids["label"] == 0]["uid"])
+        ones = list(uids[uids["label"] == 1]["uid"])
+        toss_out = list(set(nulls) - set(ones))
+
+        # also add everything that is already in train
+        if num_of_chunk == 1:
+        # keep_chunk = chunk[chunk["uid"].isin(keep)]
+            keep_chunk = chunk[~chunk["uid"].isin(toss_out)]
+        else: 
+            toss_out = list(set(toss_out) - set(df["uid"].unique()))
+            keep_chunk = chunk[~chunk["uid"].isin(toss_out)]
+
+        if num_of_chunk == 20:
+            break
+        
+        df = pd.concat([df, keep_chunk], axis=0)
+        print('Processing Chunk No. ' + str(num_of_chunk))   
+        print("df.shape is " + str(df.shape))  
+        
+    df.reset_index(inplace=True)
+    print("loaded data frame of size {}".format(df.shape))
+
     np.random.seed(123)
 
+
+    # now we must do some downsampling of the larger group in order to get meaningful trainingset
+    rus = RandomUnderSampler(sampling_strategy=2/3, random_state=1)
+    df_balanced, balanced_labels = rus.fit_resample(df, df['label'])
+    df_balanced = pd.DataFrame(df_balanced, columns=df.columns)
+
+
+    df = df_balanced
+    print("shape after downsampling is now {}".format(df.shape))
+    
     #reshuffle the data 
     df = df.iloc[np.random.permutation(len(df))]
     df = df.reset_index(drop = True)
-    # potentially clean data here 
 
-    # define cont and cat as well as targets
-#    y = "label"
-#    delete = ["communication_onlinerate", "pt_d"]
-#    cont = ["age", "device_size", "his_app_size", "list_time","device_price",
-#        "up_life_duration", "membership_life_duration","communication_avgonline_30d"]
-
-    y = "click"
-    delete = ["index"]
-    cont = ["hour"]
+    #select label, cont and cat as well as variables to delete
+    y = "label"
+    delete = ["communication_onlinerate", "pt_d"]
+    cont = ["age", "device_size", "his_app_size", "list_time","device_price",
+        "up_life_duration", "membership_life_duration","communication_avgonline_30d"]
 
     cat = list(set(list(df.columns)) - set(delete) -set(cont) - set([y]))
     df_cat = df[cat]
-    one_hot = OneHotEncoder()
-    df_cat_enc = one_hot.fit_transform(df_cat)
-    #np_cat = df_cat_enc.toarray() # now we have numpy array of desired binarized categorical features
+    #transfrom cont df and label series to np array
     np_cont = np.array(df[cont])
     np_y = np.array(df[y]) 
 
+
     # get number of embeddings and offsets (counts is number of different categories per embedding (rows per embedding matrix))
-    counts = np.array([len(i) for i in one_hot.categories_])
-    df_cat_enc_index = pd.DataFrame(np.zeros(df_cat.shape))
+    # get index of each item in each cat column as if we were to call df[col].unique() and whichever item is first gets index 0 and so on
+    overall_dic = dict()
+    for column in df_cat.columns:
+        uniques = df_cat[column].unique()
+        overall_dic[column] = pd.DataFrame()
+        overall_dic[column][column] = uniques
+        overall_dic[column][column + "_index"] = np.arange(0,len(uniques))
 
-    # helper function
-    def get_index(categories,item):
-        return np.where(categories == item)[0][0]
-    
-    # loop over categories and find the indices of the values in that column with respect to it's one_hot encoding
-    for j in range(df_cat.shape[1]):
-        ser = df_cat.iloc[:,j]
-        ind = ser.apply(lambda x: get_index(one_hot.categories_[j], x))
-        df_cat_enc_index.iloc[:,j] = ind
-        #df_cat_enc_index.iloc[i,j] = np.where(one_hot.categories_[j]==df_cat.iloc[i,j])[0][0]
+    colu = df_cat.columns
+    for col in colu:
+        print(col)
+        df_cat = pd.merge(df_cat, overall_dic[col], on=col, how='left')
+        df_cat = df_cat.drop(col, axis = 1)
 
-    np_cat = df_cat_enc_index.to_numpy()
-    #np_cat = np.transpose(np_cat) # need to transpose it for further processing
+    counts = np.array([df_cat[col].nunique() for col in df_cat.columns])
+    np_cat = np.array(df_cat)
 
 
     np.savez_compressed(
@@ -194,7 +231,7 @@ class DigixDataset(Dataset):
                         self.day
                     )
                     # print('Loading file: ', fi)
-                    with np.load(fi) as data:
+                    with np.load(fi, allow_pickle=True) as data:
                         self.X_int = data["X_int"]  # continuous  feature
                         self.X_cat = data["X_cat"]  # categorical feature
                         self.y = data["y"]          # target
@@ -317,14 +354,14 @@ class DigixDataset(Dataset):
                 fi = self.npzfile + "_{0}_reordered.npz".format(
                     self.day
                 )
-                with np.load(fi) as data:
+                with np.load(fi, allow_pickle=True) as data:
                     self.X_int = data["X_int"]  # continuous  feature
                     self.X_cat = data["X_cat"]  # categorical feature
                     self.y = data["y"]          # target
 
         else:
             # load and preprocess data
-            with np.load(file) as data:
+            with np.load(file, allow_pickle=True) as data:
                 X_int = data["X_int"]  # continuous  feature
                 X_cat = data["X_cat"]  # categorical feature
                 y = data["y"]          # target
