@@ -1511,6 +1511,9 @@ def run():
                 if args.mlperf_logging:
                     previous_iteration_time = None
 
+                target = np.array([])
+                actual = np.array([])
+
                 for j, inputBatch in enumerate(train_ld):
                     if j == 0 and args.save_onnx:
                         X_onnx, lS_o_onnx, lS_i_onnx, _, _, _ = unpack_batch(inputBatch)
@@ -1564,8 +1567,17 @@ def run():
                     # compute loss and accuracy
                     L = E.detach().cpu().numpy()  # numpy array
                     # training accuracy is not disabled
-                    # S = Z.detach().cpu().numpy()  # numpy array
-                    # T = T.detach().cpu().numpy()  # numpy array
+                    S = Z.detach().cpu().numpy()  # numpy array
+                    T = T.detach().cpu().numpy()  # numpy array
+
+                    #mbs_train = T.shape[0]  # = mini_batch_size except last
+                    #A_train = np.sum((np.round(S, 0) == T).astype(np.uint8))
+
+                    #accu_train += A_train
+                    #train_samp += mbs_train
+
+                    target = np.append(target, T)
+                    actual = np.append(actual, S)
 
                     # # print("res: ", S)
 
@@ -1631,7 +1643,13 @@ def run():
                         )
 
                         log_iter = nbatches * k + j + 1
+                        train_f1_score = sklearn.metrics.f1_score(target, np.round(actual))
+                        train_accuracy = sklearn.metrics.accuracy_score(target, np.round(actual))
+
                         writer.add_scalar("Train/Loss", train_loss, log_iter)
+                        writer.add_scalar("Train/Acc", train_accuracy, log_iter)
+                        writer.add_scalar("Train/F1", train_f1_score, log_iter)
+
 
                         total_iter = 0
                         total_samp = 0

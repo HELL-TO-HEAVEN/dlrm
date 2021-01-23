@@ -160,6 +160,7 @@ def getDigixData(
         overall_dic[column][column + "_index"] = np.arange(0,len(uniques))
 
     colu = df_cat.columns
+    print("Encoding categorical features ... ")
     for col in colu:
         print(col)
         df_cat = pd.merge(df_cat, overall_dic[col], on=col, how='left')
